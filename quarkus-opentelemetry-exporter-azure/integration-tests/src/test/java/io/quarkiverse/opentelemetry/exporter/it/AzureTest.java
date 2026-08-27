@@ -71,9 +71,16 @@ public class AzureTest {
                 .findAny();
         assertThat(telemetryDataExport).as("Telemetry export request should not appear as a dependency.").isEmpty();
 
-        containOTeLog(telemetryHttpRequests);
-
-        containOTelMetric(telemetryHttpRequests);
+        // Logs and metrics are exported on their own periodic schedule, so poll until they arrive
+        // instead of asserting once against a single snapshot (avoids flakiness under CI load).
+        await()
+                .atMost(Duration.ofSeconds(30))
+                .untilAsserted(() -> {
+                    List<LoggedRequest> requests = wireMockServer
+                            .findAll(postRequestedFor(urlEqualTo("/export/v2.1/track")));
+                    containOTeLog(requests);
+                    containOTelMetric(requests);
+                });
     }
 
     private static Callable<Boolean> telemetryDataContainTheHttpCall(WireMockServer wireMockServer) {
